@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GlassBlock Atlas - Community-Driven Glass Block Mapping</title>
-    <meta name="description" content="Discover and map architectural glass blocks around the world. Join our community in documenting these beautiful architectural elements.">
+    <title>GlassBlock Atlas - Real-Time Community Mapping</title>
+    <meta name="description" content="Discover and map architectural glass blocks around the world. Real-time community-driven mapping with instant updates.">
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -77,6 +77,22 @@
             font-weight: bold;
             font-size: 12px;
         }
+
+        .status-indicator {
+            @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
+        }
+
+        .status-online {
+            @apply bg-green-100 text-green-800;
+        }
+
+        .status-offline {
+            @apply bg-gray-100 text-gray-800;
+        }
+
+        .loading {
+            @apply animate-pulse bg-gray-200;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -93,16 +109,24 @@
                     </div>
                     <div>
                         <h1 class="text-xl font-bold text-gray-900">GlassBlock Atlas</h1>
-                        <p class="text-sm text-gray-600">Community-driven glass block mapping</p>
+                        <p class="text-sm text-gray-600">Real-time community mapping</p>
                     </div>
                 </div>
                 
-                <button id="addPinBtn" class="btn-primary flex items-center space-x-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    <span>Add Glass Block</span>
-                </button>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div id="connectionStatus" class="status-indicator status-offline">
+                            <div class="w-2 h-2 bg-gray-400 rounded-full mr-1"></div>
+                            <span>Connecting...</span>
+                        </div>
+                    </div>
+                    <button id="addPinBtn" class="btn-primary flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span>Add Glass Block</span>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -112,8 +136,11 @@
         <div class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-2xl font-bold text-gray-900">Glass Block Map</h2>
-                    <p id="pinCount" class="text-gray-600">0 glass blocks documented</p>
+                    <h2 class="text-2xl font-bold text-gray-900">Global Glass Block Map</h2>
+                    <p id="pinCount" class="text-gray-600">Loading pins...</p>
+                </div>
+                <div class="text-sm text-gray-500">
+                    <span id="lastUpdate">Real-time updates enabled</span>
                 </div>
             </div>
 
@@ -203,7 +230,7 @@
 
                 <div class="flex space-x-4 pt-4">
                     <button type="button" id="cancelAddBtn" class="btn-secondary flex-1">Cancel</button>
-                    <button type="submit" class="btn-primary flex-1">Add Glass Block</button>
+                    <button type="submit" class="btn-primary flex-1">Add to Global Map</button>
                 </div>
             </form>
         </div>
@@ -234,22 +261,90 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCxr8xu6usVQV7kGKGTJS4FoW8YhOlGNrs",
+            authDomain: "glasblokken-atlas-db.firebaseapp.com",
+            databaseURL: "https://glasblokken-atlas-db-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "glasblokken-atlas-db",
+            storageBucket: "glasblokken-atlas-db.firebasestorage.app",
+            messagingSenderId: "997405989267",
+            appId: "1:997405989267:web:3bedc40ecba0a58f737066"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
         // Global variables
         let map;
-        let pins = [];
+        let pins = new Map(); // Use Map for better performance
         let selectedPin = null;
+        let unsubscribe = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
-            loadPins();
             setupEventListeners();
-            updatePinCount();
+            initializeFirebase();
         });
+
+        // Initialize Firebase connection
+        function initializeFirebase() {
+            updateConnectionStatus('Connecting...', 'offline');
+            
+            // Listen for real-time updates
+            unsubscribe = db.collection('pins').onSnapshot(
+                function(snapshot) {
+                    updateConnectionStatus('Connected', 'online');
+                    
+                    snapshot.docChanges().forEach(function(change) {
+                        const pinData = change.doc.data();
+                        const pinId = change.doc.id;
+                        
+                        if (change.type === 'added') {
+                            addPinToMap({ id: pinId, ...pinData });
+                        } else if (change.type === 'modified') {
+                            updatePinOnMap({ id: pinId, ...pinData });
+                        } else if (change.type === 'removed') {
+                            removePinFromMap(pinId);
+                        }
+                    });
+                    
+                    updatePinCount();
+                    updateLastUpdate();
+                },
+                function(error) {
+                    console.error('Firebase connection error:', error);
+                    updateConnectionStatus('Connection Error', 'offline');
+                }
+            );
+        }
+
+        // Update connection status
+        function updateConnectionStatus(text, status) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `status-indicator status-${status}`;
+            statusEl.innerHTML = `
+                <div class="w-2 h-2 ${status === 'online' ? 'bg-green-400' : 'bg-gray-400'} rounded-full mr-1"></div>
+                <span>${text}</span>
+            `;
+        }
+
+        // Update last update time
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `Last updated: ${now.toLocaleTimeString()}`;
+        }
 
         // Initialize the map
         function initializeMap() {
@@ -464,7 +559,6 @@
         function handleAddPin(event) {
             event.preventDefault();
             
-            const formData = new FormData(event.target);
             const title = document.getElementById('pinTitle').value;
             const description = document.getElementById('pinDescription').value;
             const lat = parseFloat(document.getElementById('pinLat').value);
@@ -479,34 +573,39 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const newPin = {
-                    id: Date.now().toString(),
                     title: title,
                     description: description,
                     location: { lat: lat, lng: lng },
                     imageUrl: e.target.result,
-                    architecturalStyle: document.getElementById('pinStyle').value || undefined,
-                    buildingType: document.getElementById('pinBuildingType').value || undefined,
-                    uniqueFeatures: document.getElementById('pinFeatures').value || undefined,
+                    architecturalStyle: document.getElementById('pinStyle').value || null,
+                    buildingType: document.getElementById('pinBuildingType').value || null,
+                    uniqueFeatures: document.getElementById('pinFeatures').value || null,
                     tags: [],
-                    createdAt: new Date().toISOString()
+                    createdAt: new Date().toISOString(),
+                    addedBy: 'Anonymous User', // Could be enhanced with user authentication
+                    lastUpdated: new Date().toISOString()
                 };
                 
-                addPin(newPin);
-                hideAddModal();
+                // Add to Firebase
+                db.collection('pins').add(newPin)
+                    .then(function(docRef) {
+                        console.log('Pin added with ID: ', docRef.id);
+                        hideAddModal();
+                    })
+                    .catch(function(error) {
+                        console.error('Error adding pin: ', error);
+                        alert('Error adding pin. Please try again.');
+                    });
             };
             reader.readAsDataURL(imageFile);
         }
 
-        // Add a new pin
-        function addPin(pin) {
-            pins.push(pin);
-            savePins();
-            addPinToMap(pin);
-            updatePinCount();
-        }
-
         // Add pin to map
         function addPinToMap(pin) {
+            if (pins.has(pin.id)) {
+                return; // Pin already exists
+            }
+            
             const marker = L.marker([pin.location.lat, pin.location.lng], {
                 icon: L.divIcon({
                     className: 'custom-marker',
@@ -544,50 +643,50 @@
                 showDetailsModal(pin);
             });
             
-            pin.marker = marker;
+            pins.set(pin.id, { ...pin, marker: marker });
+        }
+
+        // Update pin on map
+        function updatePinOnMap(pin) {
+            if (pins.has(pin.id)) {
+                const existingPin = pins.get(pin.id);
+                if (existingPin.marker) {
+                    map.removeLayer(existingPin.marker);
+                }
+            }
+            addPinToMap(pin);
+        }
+
+        // Remove pin from map
+        function removePinFromMap(pinId) {
+            if (pins.has(pinId)) {
+                const pin = pins.get(pinId);
+                if (pin.marker) {
+                    map.removeLayer(pin.marker);
+                }
+                pins.delete(pinId);
+            }
         }
 
         // Delete selected pin
         function deleteSelectedPin() {
             if (selectedPin && confirm('Are you sure you want to delete this glass block pin? This action cannot be undone.')) {
-                const index = pins.findIndex(p => p.id === selectedPin.id);
-                if (index > -1) {
-                    pins.splice(index, 1);
-                    if (selectedPin.marker) {
-                        map.removeLayer(selectedPin.marker);
-                    }
-                    savePins();
-                    updatePinCount();
-                    hideDetailsModal();
-                }
-            }
-        }
-
-        // Save pins to localStorage
-        function savePins() {
-            try {
-                localStorage.setItem('glassblock-atlas-pins', JSON.stringify(pins));
-            } catch (error) {
-                console.error('Failed to save pins:', error);
-            }
-        }
-
-        // Load pins from localStorage
-        function loadPins() {
-            try {
-                const stored = localStorage.getItem('glassblock-atlas-pins');
-                pins = stored ? JSON.parse(stored) : [];
-                pins.forEach(pin => addPinToMap(pin));
-            } catch (error) {
-                console.error('Failed to load pins:', error);
-                pins = [];
+                db.collection('pins').doc(selectedPin.id).delete()
+                    .then(function() {
+                        console.log('Pin deleted successfully');
+                        hideDetailsModal();
+                    })
+                    .catch(function(error) {
+                        console.error('Error deleting pin: ', error);
+                        alert('Error deleting pin. Please try again.');
+                    });
             }
         }
 
         // Update pin count display
         function updatePinCount() {
-            const count = pins.length;
-            document.getElementById('pinCount').textContent = `${count} glass block${count !== 1 ? 's' : ''} documented`;
+            const count = pins.size;
+            document.getElementById('pinCount').textContent = `${count} glass block${count !== 1 ? 's' : ''} documented globally`;
         }
 
         // Make showDetailsModal globally accessible
