@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlassBlock Atlas - Community-Driven Glass Block Mapping</title>
+    <meta name="description" content="Discover and map architectural glass blocks around the world. Join our community in documenting these beautiful architectural elements.">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+        }
+        
+        .btn-secondary {
+            @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg border border-gray-300 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+        }
+        
+        .card {
+            @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+        }
+        
+        .input-field {
+            @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 0.5rem;
+            max-width: 32rem;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .custom-marker {
+            background: #0284c7;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">GlassBlock Atlas</h1>
+                        <p class="text-sm text-gray-600">Community-driven glass block mapping</p>
+                    </div>
+                </div>
+                
+                <button id="addPinBtn" class="btn-primary flex items-center space-x-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    <span>Add Glass Block</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6">
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Glass Block Map</h2>
+                    <p id="pinCount" class="text-gray-600">0 glass blocks documented</p>
+                </div>
+            </div>
+
+            <div class="card p-0 overflow-hidden">
+                <div id="map" style="height: 600px; width: 100%;"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Pin Modal -->
+    <div id="addPinModal" class="modal">
+        <div class="modal-content">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Add Glass Block</h2>
+                <button id="closeAddModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="addPinForm" class="p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+                    <input type="text" id="pinTitle" class="input-field" placeholder="Enter a descriptive title" required>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Description *</label>
+                    <textarea id="pinDescription" class="input-field min-h-[100px] resize-none" placeholder="Describe the glass block installation..." required></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Location *</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="number" id="pinLat" step="any" class="input-field" placeholder="Latitude" required>
+                        <input type="number" id="pinLng" step="any" class="input-field" placeholder="Longitude" required>
+                    </div>
+                    <button type="button" id="getLocationBtn" class="mt-2 btn-secondary flex items-center space-x-2 text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <span>Use my current location</span>
+                    </button>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Photo *</label>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <div id="imagePreview" class="hidden space-y-2">
+                            <img id="previewImg" class="max-w-full h-48 object-cover rounded-lg mx-auto">
+                            <p id="fileName" class="text-sm text-gray-600"></p>
+                            <button type="button" id="removeImage" class="text-red-600 hover:text-red-700 text-sm">Remove image</button>
+                        </div>
+                        <div id="imageUpload">
+                            <svg class="w-12 h-12 text-gray-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <p class="text-gray-600">Click to upload a photo</p>
+                            <button type="button" id="chooseFileBtn" class="btn-secondary flex items-center space-x-2 mx-auto mt-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                                <span>Choose File</span>
+                            </button>
+                        </div>
+                        <input type="file" id="imageFile" accept="image/*" class="hidden" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Architectural Style</label>
+                    <input type="text" id="pinStyle" class="input-field" placeholder="e.g., Art Deco, Modern, Brutalist">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Building Type</label>
+                    <input type="text" id="pinBuildingType" class="input-field" placeholder="e.g., Office building, Church, School">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Unique Features</label>
+                    <textarea id="pinFeatures" class="input-field min-h-[80px] resize-none" placeholder="Describe any unique or notable features..."></textarea>
+                </div>
+
+                <div class="flex space-x-4 pt-4">
+                    <button type="button" id="cancelAddBtn" class="btn-secondary flex-1">Cancel</button>
+                    <button type="submit" class="btn-primary flex-1">Add Glass Block</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pin Details Modal -->
+    <div id="pinDetailsModal" class="modal">
+        <div class="modal-content">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 id="detailTitle" class="text-xl font-semibold text-gray-900"></h2>
+                <div class="flex items-center space-x-2">
+                    <button id="deletePinBtn" class="text-red-600 hover:text-red-700 transition-colors p-2" title="Delete pin">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                    <button id="closeDetailsModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="pinDetailsContent" class="p-6 space-y-6">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // Global variables
+        let map;
+        let pins = [];
+        let selectedPin = null;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            loadPins();
+            setupEventListeners();
+            updatePinCount();
+        });
+
+        // Initialize the map
+        function initializeMap() {
+            map = L.map('map').setView([40.7128, -74.0060], 10);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Try to get user's location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        map.setView([position.coords.latitude, position.coords.longitude], 13);
+                    },
+                    function(error) {
+                        console.log('Geolocation error:', error);
+                    }
+                );
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Add pin button
+            document.getElementById('addPinBtn').addEventListener('click', showAddModal);
+            
+            // Modal controls
+            document.getElementById('closeAddModal').addEventListener('click', hideAddModal);
+            document.getElementById('cancelAddBtn').addEventListener('click', hideAddModal);
+            document.getElementById('closeDetailsModal').addEventListener('click', hideDetailsModal);
+            
+            // Form submission
+            document.getElementById('addPinForm').addEventListener('submit', handleAddPin);
+            
+            // Location button
+            document.getElementById('getLocationBtn').addEventListener('click', getCurrentLocation);
+            
+            // Image upload
+            document.getElementById('chooseFileBtn').addEventListener('click', () => document.getElementById('imageFile').click());
+            document.getElementById('imageFile').addEventListener('change', handleImageUpload);
+            document.getElementById('removeImage').addEventListener('click', removeImage);
+            
+            // Delete pin
+            document.getElementById('deletePinBtn').addEventListener('click', deleteSelectedPin);
+            
+            // Close modals when clicking outside
+            document.getElementById('addPinModal').addEventListener('click', function(e) {
+                if (e.target === this) hideAddModal();
+            });
+            document.getElementById('pinDetailsModal').addEventListener('click', function(e) {
+                if (e.target === this) hideDetailsModal();
+            });
+        }
+
+        // Show add pin modal
+        function showAddModal() {
+            document.getElementById('addPinModal').classList.add('show');
+        }
+
+        // Hide add pin modal
+        function hideAddModal() {
+            document.getElementById('addPinModal').classList.remove('show');
+            document.getElementById('addPinForm').reset();
+            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('imageUpload').classList.remove('hidden');
+        }
+
+        // Show pin details modal
+        function showDetailsModal(pin) {
+            selectedPin = pin;
+            document.getElementById('detailTitle').textContent = pin.title;
+            
+            const content = document.getElementById('pinDetailsContent');
+            content.innerHTML = `
+                <div class="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                    <img src="${pin.imageUrl}" alt="${pin.title}" class="w-full h-full object-cover">
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Description</h3>
+                    <p class="text-gray-700 leading-relaxed">${pin.description}</p>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Location</h3>
+                    <div class="flex items-center space-x-2 text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <span>${pin.location.lat.toFixed(6)}, ${pin.location.lng.toFixed(6)}</span>
+                    </div>
+                    <a href="https://www.google.com/maps?q=${pin.location.lat},${pin.location.lng}" target="_blank" class="text-blue-600 hover:text-blue-700 text-sm mt-1 inline-block">View on Google Maps</a>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Details</h3>
+                        <div class="space-y-2">
+                            <div class="flex items-center space-x-2 text-gray-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                <span>Added ${new Date(pin.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            ${pin.buildingType ? `
+                            <div class="flex items-center space-x-2 text-gray-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                </svg>
+                                <span>${pin.buildingType}</span>
+                            </div>
+                            ` : ''}
+                            ${pin.architecturalStyle ? `
+                            <div class="text-gray-600">
+                                <span class="font-medium">Style:</span> ${pin.architecturalStyle}
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    ${pin.tags && pin.tags.length > 0 ? `
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Tags</h3>
+                        <div class="flex flex-wrap gap-2">
+                            ${pin.tags.map(tag => `
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                </svg>
+                                ${tag}
+                            </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${pin.uniqueFeatures ? `
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Unique Features</h3>
+                    <p class="text-gray-700 leading-relaxed">${pin.uniqueFeatures}</p>
+                </div>
+                ` : ''}
+                
+                <div class="pt-4">
+                    <button onclick="hideDetailsModal()" class="btn-primary w-full">Close</button>
+                </div>
+            `;
+            
+            document.getElementById('pinDetailsModal').classList.add('show');
+        }
+
+        // Hide pin details modal
+        function hideDetailsModal() {
+            document.getElementById('pinDetailsModal').classList.remove('show');
+            selectedPin = null;
+        }
+
+        // Get current location
+        function getCurrentLocation() {
+            const btn = document.getElementById('getLocationBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>Getting location...</span>';
+            btn.disabled = true;
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        document.getElementById('pinLat').value = position.coords.latitude;
+                        document.getElementById('pinLng').value = position.coords.longitude;
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    },
+                    function(error) {
+                        alert('Unable to get your location. Please enter coordinates manually.');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by this browser.');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Handle image upload
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('previewImg').src = e.target.result;
+                    document.getElementById('fileName').textContent = file.name;
+                    document.getElementById('imagePreview').classList.remove('hidden');
+                    document.getElementById('imageUpload').classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Remove image
+        function removeImage() {
+            document.getElementById('imageFile').value = '';
+            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('imageUpload').classList.remove('hidden');
+        }
+
+        // Handle add pin form submission
+        function handleAddPin(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const title = document.getElementById('pinTitle').value;
+            const description = document.getElementById('pinDescription').value;
+            const lat = parseFloat(document.getElementById('pinLat').value);
+            const lng = parseFloat(document.getElementById('pinLng').value);
+            const imageFile = document.getElementById('imageFile').files[0];
+            
+            if (!title || !description || !imageFile || isNaN(lat) || isNaN(lng)) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const newPin = {
+                    id: Date.now().toString(),
+                    title: title,
+                    description: description,
+                    location: { lat: lat, lng: lng },
+                    imageUrl: e.target.result,
+                    architecturalStyle: document.getElementById('pinStyle').value || undefined,
+                    buildingType: document.getElementById('pinBuildingType').value || undefined,
+                    uniqueFeatures: document.getElementById('pinFeatures').value || undefined,
+                    tags: [],
+                    createdAt: new Date().toISOString()
+                };
+                
+                addPin(newPin);
+                hideAddModal();
+            };
+            reader.readAsDataURL(imageFile);
+        }
+
+        // Add a new pin
+        function addPin(pin) {
+            pins.push(pin);
+            savePins();
+            addPinToMap(pin);
+            updatePinCount();
+        }
+
+        // Add pin to map
+        function addPinToMap(pin) {
+            const marker = L.marker([pin.location.lat, pin.location.lng], {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: '🏢',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 24]
+                })
+            }).addTo(map);
+            
+            marker.bindPopup(`
+                <div class="p-2 min-w-[200px]">
+                    <h3 class="font-semibold text-gray-900 mb-2">${pin.title}</h3>
+                    <p class="text-sm text-gray-600 mb-3">${pin.description}</p>
+                    <div class="space-y-1 text-xs text-gray-500">
+                        <div class="flex items-center space-x-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <span>${new Date(pin.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        ${pin.buildingType ? `
+                        <div class="flex items-center space-x-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                            <span>${pin.buildingType}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <button onclick="showDetailsModal(${JSON.stringify(pin).replace(/"/g, '&quot;')})" class="mt-3 w-full btn-primary text-xs py-1">View Details</button>
+                </div>
+            `);
+            
+            marker.on('click', function() {
+                showDetailsModal(pin);
+            });
+            
+            pin.marker = marker;
+        }
+
+        // Delete selected pin
+        function deleteSelectedPin() {
+            if (selectedPin && confirm('Are you sure you want to delete this glass block pin? This action cannot be undone.')) {
+                const index = pins.findIndex(p => p.id === selectedPin.id);
+                if (index > -1) {
+                    pins.splice(index, 1);
+                    if (selectedPin.marker) {
+                        map.removeLayer(selectedPin.marker);
+                    }
+                    savePins();
+                    updatePinCount();
+                    hideDetailsModal();
+                }
+            }
+        }
+
+        // Save pins to localStorage
+        function savePins() {
+            try {
+                localStorage.setItem('glassblock-atlas-pins', JSON.stringify(pins));
+            } catch (error) {
+                console.error('Failed to save pins:', error);
+            }
+        }
+
+        // Load pins from localStorage
+        function loadPins() {
+            try {
+                const stored = localStorage.getItem('glassblock-atlas-pins');
+                pins = stored ? JSON.parse(stored) : [];
+                pins.forEach(pin => addPinToMap(pin));
+            } catch (error) {
+                console.error('Failed to load pins:', error);
+                pins = [];
+            }
+        }
+
+        // Update pin count display
+        function updatePinCount() {
+            const count = pins.length;
+            document.getElementById('pinCount').textContent = `${count} glass block${count !== 1 ? 's' : ''} documented`;
+        }
+
+        // Make showDetailsModal globally accessible
+        window.showDetailsModal = showDetailsModal;
+    </script>
+</body>
+</html> 
