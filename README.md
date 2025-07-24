@@ -136,4 +136,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Happy Glass Block Hunting! 🏢✨** 
+**Happy Glass Block Hunting! ** 
